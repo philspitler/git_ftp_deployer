@@ -1,0 +1,25 @@
+chmod the deploy script and place it wherever you'd like.  I put mine in /usr/bin. 
+
+You'll want to create any tags manually for whatever server groups you set up.  So if the code from "master" is already on both staging and production, run "git tag staging master" and "git tag production master".  This will get those setup for the script to create diffs from later.
+
+
+Create a file named "deploy.yml" in the root of your project w/ the following sytax.
+
+staging:
+  servers: [
+  { host: ftp-staging.domain.com, directory: /var/sites/staging/sitefolder }
+  ]
+
+production:
+  servers: [
+  { host: ftp-production.domain.com, directory: /var/sites/sitefolder }
+  ]
+
+
+The deploy script uses FTP credentials so if you can FTP to the servers, you can use the script.
+
+
+Example usage:
+deploy production master user pass
+
+This uses a diff from the current "production" tag and "master", FTPs the files up, and recreates the "production" tag.
