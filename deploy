@@ -1,0 +1,156 @@
+#!/usr/bin/env ruby
+
+require 'yaml'
+require 'net/ftp'
+
+class Array
+  def to_h(keys)
+    Hash[*keys.zip(self).flatten]
+  end
+end
+
+class Deployer
+  attr_accessor :environment, :revision, :ftp_user, :ftp_pass
+
+  def initialize(args)
+    begin
+      settings = YAML::load_file('deploy.yml')
+    rescue
+      puts "Error loading deploy.yml file."
+      exit
+    end
+    
+    begin
+      @environment = args[0]
+      @revision = args[1]
+      @servers = settings[@environment]['servers']
+    rescue
+      puts "Error loading #{args[0]} environment information from deploy.yml file."
+      exit
+    end
+
+    @ftp_user = args[2]
+    @ftp_pass = args[3]
+
+    @operations = { "A" => "add", "M" => "add", "D" => "delete" }
+  end
+
+  def self.check_usage
+    unless ARGV.length == 4
+      puts "\nUsage: environment revision ftp_username ftp_password\n\n"
+      #puts "environment = staging || production\n\n"
+      exit
+    end
+  end
+
+  def deploy
+    begin
+      `git checkout #{revision}`
+      puts "checked out #{revision}"
+      tags = `git tag`.split("\n")
+      if tags.include?(environment)
+        changeset = `git diff --name-status #{environment} #{revision}`.split("\n").sort.reverse.collect!{ |x| x.split("\t").to_h(["operation", "file"]) }
+        puts "grabbed changeset"
+        for server in @servers
+          Net::FTP.open(server['host']) do |ftp|
+            ftp.login(@ftp_user, @ftp_pass)
+            begin
+              ftp.chdir(server['directory'])
+              puts "changed to initial dir: #{server['directory']}"
+            rescue
+              ftp.close
+              puts "Error changing to default remote directory."
+              exit
+            end
+            last_dir = ''
+            for change in changeset
+
+              #ADD A FILE
+              if @operations[change["operation"]].eql?("add")
+
+                unless File.dirname(change['file']).eql?(last_dir)
+                  #RESET TO MAIN DIRECTORY
+                  ftp.chdir(server['directory'])
+                  puts "change back to main directory #{server['directory']}"
+                  #RECURSIVELY CREATE DIRECTORIES AND CHANGE TO THE PROPER ONE
+                  begin
+                    ftp.chdir(File.dirname(change['file']))
+                    puts "changed dir: #{File.dirname(change['file'])}"
+                  rescue
+                    for dir in File.dirname(change["file"]).split('/')
+                      begin
+                        ftp.chdir(ftp.pwd + '/' + dir)
+                        puts "changed dir: #{dir}"
+                      rescue
+                        ftp.mkdir(ftp.pwd + '/' + dir)
+                        puts "made dir: #{dir}"
+                        ftp.chdir(ftp.pwd + '/' + dir)
+                        puts "changed dir: #{dir}"
+                      end
+                    end
+                  end
+                end
+                last_dir = File.dirname(change['file'])
+
+                #UPLOAD THE FILE (NOT DEPLOY CONFIG THOUGH)
+                unless change["file"].eql?("deploy.yml") or change["file"].eql?(".gitignore")
+                  ftp.putbinaryfile(change["file"])
+                  puts "put file: #{change['file']}"
+                end
+              end
+              if @operations[change["operation"]].eql?("delete")
+                begin
+                  ftp.delete(change["file"])
+                  puts "deleted file: #{change['file']}"
+
+                  #DELETE FOLDER ON FTP SERVER IF NOT IN WORKING DIRECTORY
+                  del_dir = File.dirname(change['file'])
+                  unless File.exists?(del_dir)
+                    ftp.rmdir(del_dir)
+                    puts "removed dir: #{del_dir}"
+                  end
+                rescue
+                end
+
+                #DELETE FOLDERS BACK UP THE TREE IF MISSING
+                if del_dir
+                  dirs = del_dir.split('/')
+                  for adir in dirs
+                    del_dir = File.dirname(del_dir)
+                    if not File.exists?(del_dir)
+                      begin
+                        ftp.rmdir(del_dir)
+                        puts "removed dir: #{del_dir}"
+                      rescue
+                      end
+                    end
+                  end
+                end
+              end
+            end
+          end
+        end
+
+        `git tag -d #{environment}`
+        puts "deleted tag: #{environment}"
+        `git tag #{environment}`
+        puts "created tag: #{environment}"
+      else
+        puts "Error, must complete initial deploy manually and tag it."
+      end
+    rescue
+      return false
+    end
+    return true
+  end
+end
+
+if $0 == __FILE__
+  Deployer.check_usage
+  deployer = Deployer.new(ARGV)
+  deployed = false
+  until deployed
+    deployed = deployer.deploy
+  end
+  puts "DEPLOYED"
+end
