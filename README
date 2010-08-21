@@ -1,4 +1,4 @@
-chmod the deploy script and place it wherever you'd like.  I put mine in /usr/bin. 
+chmod the deploy script to make it executable and place it wherever you'd like.  I put mine in /usr/bin. 
 
 You'll want to create any tags manually for whatever server groups you set up.  So if the code from "master" is already on both staging and production, run "git tag staging master" and "git tag production master".  This will get those setup for the script to create diffs from later.
 
