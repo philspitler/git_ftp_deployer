@@ -12,7 +12,7 @@ staging:
 
 production:
   servers: [
-  { host: ftp-production.domain.com, directory: /var/sites/sitefolder }
+  { host: ftp-production.domain.com, directory: /var/sites/sitefolder },
   { host: ftp-production2.domain.com, directory: /var/sites/staging/sitefolder }
   ]
 
