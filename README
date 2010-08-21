@@ -13,11 +13,13 @@ staging:
 production:
   servers: [
   { host: ftp-production.domain.com, directory: /var/sites/sitefolder }
+  { host: ftp-production2.domain.com, directory: /var/sites/staging/sitefolder }
   ]
 
 
 The deploy script uses FTP credentials so if you can FTP to the servers, you can use the script.
 
+As shown above, you may add multiple servers to a group.
 
 Example usage:
 deploy production master user pass
